@@ -365,7 +365,8 @@ if __name__ == "__main__":
     pos = ["x", "y", "z"]
     for i in range(len(nodos)*3):
         r = pos[i%3]
-        print(f"Desplazamiento del nodo {nodos[i//3].get_name()} en {r} es: {round(global_desplazamiento[i], 7)}in")
+        print("R"+r+f" para nodo ({(i+1)//3}) es: {round(reacciones[i])}lb")
+        print(f"Desplazamiento del nodo {nodos[(i)//3].get_name()} en {r} es: {round(global_desplazamiento[i], 7)}in")
     
     
     
