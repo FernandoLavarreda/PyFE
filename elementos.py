@@ -2,6 +2,7 @@
 
 import numpy as np
 from typing import Tuple, List
+from dataclasses import dataclass
 from math import atan, pi, cos, sin
 
 class Node:
@@ -268,110 +269,222 @@ def solve_matrix3D(matrix:np.array, conditions:List[float], nodes:List[Node3D]):
     assert len(nodes) == len(matrix)//3
     boundary_cond = matrix.copy()
     counter = 0
-    
+    remove_cond = []
+    conditions_copy = conditions.copy()
     for node in nodes:
         if node.get_restrictions()[0]:
             line = [0 for i in range(len(nodes)*3)]
             line[counter*3] = 1
             boundary_cond[counter*3] = line
-        
+            remove_cond.append(counter*3)
+            
         if node.get_restrictions()[1]:
             line = [0 for i in range(len(nodes)*3)]
             line[counter*3+1] = 1
             boundary_cond[counter*3+1] = line
-        
+            remove_cond.append(counter*3+1)
+            
         if node.get_restrictions()[2]:
             line = [0 for i in range(len(nodes)*3)]
             line[counter*3+2] = 1
             boundary_cond[counter*3+2] = line
-        
+            remove_cond.append(counter*3+2)
+            
         counter+=1 
+    
+    for i in remove_cond:
+        conditions[i] = 0
     
     inverse = np.linalg.inv(boundary_cond)
     displacement = np.matmul(inverse, conditions)
-    reactions = np.matmul(matrix, displacement) - np.array(conditions)
-    
+    reactions = np.matmul(matrix, displacement) - np.array(conditions_copy)
     return displacement, reactions
 
 
+
+class Node3DoF(Node):
+    def __init__(self, x:float, y:float, name:str, limits:Tuple[bool, bool, bool]=(False, False, False)):
+        super().__init__(x, y, name, limits)
+
+
+class ElementFrame(Element):
+    def __init__(self, young_modulus:float, area:float, inertia:float, nodes:Tuple[Node, Node]):
+        super().__init__(young_modulus, area, nodes)
+        self.inertia = inertia
+        self.trans_transpose = None
+        self.transformf()
+        self.stiffnessf()
+        
+    
+    
+    def stiffnessf(self):
+        k = self.area*self.young/self.length
+        sub = 12*self.young*self.inertia/self.length**3
+        sub2 = 6*self.young*self.inertia/self.length**2 
+        sub3 = 4*self.young*self.inertia/self.length 
+        sub4 = 2*self.young*self.inertia/self.length 
+        
+        local_stiffness = np.array([[k, 0, 0, -k, 0, 0], [0, sub, sub2, 0, -sub, sub2], [0, sub2, sub3, 0, -sub2, sub4],\
+                                    [-k, 0, 0, k, 0, 0], [0, -sub, -sub2, 0, sub, -sub2], [0, sub2, sub4, 0, -sub2, sub3]])
+        self.stiff_matrix = self.trans_transpose@local_stiffness@self.trans_matrix
+    
+    
+    def transformf(self):
+        self.trans_matrix = np.array([[cos(self.angle), sin(self.angle), 0, 0, 0, 0], [-sin(self.angle), cos(self.angle), 0, 0, 0, 0],\
+                                      [0, 0, 1, 0, 0, 0], [0, 0, 0, cos(self.angle), sin(self.angle), 0],\
+                                      [0, 0, 0, -sin(self.angle), cos(self.angle), 0], [0, 0, 0, 0, 0, 1]])
+        self.trans_transpose = np.transpose(self.trans_matrix)
+
+
+def globalize_perpendicular_load(load:float, angle:float):
+        """Obtain x and y component of force perpendicular to given angle"""
+        xcomp = cos(angle+pi/2)*load
+        ycomp = sin(angle+pi/2)*load
+        return xcomp, ycomp
+
+
+@dataclass
+class PerpendicularLoad:
+    magnitude:float = 0
+    reactioni:Tuple[float, float] = (0 , 0)
+    reactionj:Tuple[float, float] = (0 , 0)
+    momenti:float = 0
+    momentj:float = 0
+    
+    def apply(self, element):
+        return
+    
+
+class PointLoad(PerpendicularLoad):
+    def __init__(self, magnitude, distance):
+        """distance refers to the distance from node i of the element
+        """
+        assert distance >= 0, "Distance must be positive"
+        self.magnitude = magnitude
+        self.distance = distance
+    
+    
+    def apply(self, element):
+        assert self.distance <= element.length, "Cannot apply load outside element"
+        reactioni = -self.magnitude*((element.length-self.distance)/element.length)**2*(3-2*(element.length-self.distance)/element.length)
+        reactionj = -self.magnitude*(self.distance/element.length)**2*(3-2*self.distance/element.length)
+        self.momenti = -self.magnitude*self.distance*((element.length-self.distance)/element.length)**2
+        self.momentj = self.magnitude*(self.distance/element.length)**2*(element.length-self.distance)
+        self.reactioni = globalize_perpendicular_load(reactioni, element.angle)
+        self.reactionj = globalize_perpendicular_load(reactionj, element.angle)
+    
+
+class UniformLoad(PerpendicularLoad):
+    def __init__(self, magnitude):
+        self.magnitude = magnitude
+    
+    
+    def apply(self, element):
+        reactioni = -self.magnitude*element.length/2
+        reactionj = reactioni
+        self.momenti = -self.magnitude*element.length**2/12
+        self.momentj = -self.momenti
+        self.reactioni = globalize_perpendicular_load(reactioni, element.angle)
+        self.reactionj = globalize_perpendicular_load(reactionj, element.angle)
+
+
+class TriangleLoad(PerpendicularLoad):
+    def __init__(self, magnitude, ascending=True):
+        """
+        Ascending indicates positive slope (increase in absolute value of the force)
+        """
+        self.magnitude = magnitude
+        self.ascending = ascending
+    
+    def apply(self, element):
+        reactioni = -3*element.length*self.magnitude/20
+        reactionj = -7*element.length*self.magnitude/20
+        self.momenti = -self.magnitude*element.length**2/30
+        self.momentj = self.magnitude*element.length**2/20
+        
+        if not self.ascending:
+            reactioni, reactionj = reactionj, reactioni
+            self.momenti, self.momentj = -self.momentj, -self.momenti
+        self.reactioni = globalize_perpendicular_load(reactioni, element.angle)
+        self.reactionj = globalize_perpendicular_load(reactionj, element.angle)
+
+
+def global_matrixFrame(elements:List[ElementFrame]):
+    gmatrix = np.zeros((Node3DoF.code*3, Node3DoF.code*3))
+    for element in elements:
+        codei = element.get_nodes()[0].get_code()
+        codej = element.get_nodes()[1].get_code()
+        for row in range(6):
+            for column in range(6):
+                if row < 3:
+                    if column < 3:
+                        gmatrix[codei*3+(row%3)][codei*3+(column%3)] += element.get_stiffness()[row][column]
+                    else:
+                        gmatrix[codei*3+(row%3)][codej*3+(column%3)] += element.get_stiffness()[row][column]
+                else:
+                    if column < 3:
+                        gmatrix[codej*3+(row%3)][codei*3+(column%3)] += element.get_stiffness()[row][column]
+                    else:
+                        gmatrix[codej*3+(row%3)][codej*3+(column%3)] += element.get_stiffness()[row][column]
+    return gmatrix
+
+
+def load_elements(elements:List[ElementFrame], loads:List[List[PerpendicularLoad]]):
+    assert len(loads) == len(elementos), "Loads must equal elements"
+    
+    load_matrix = np.zeros((Node3DoF.code*3, 1))
+    for i in range(len(loads)):
+        if loads[i]:
+            for load in loads[i]:
+                load.apply(elements[i])
+                inode = elements[i].get_nodes()[0].get_code()
+                jnode = elements[i].get_nodes()[1].get_code()
+                load_matrix[inode*3] += load.reactioni[0]
+                load_matrix[inode*3+1] += load.reactioni[1]
+                load_matrix[inode*3+2] += load.momenti
+                load_matrix[jnode*3] += load.reactionj[0]
+                load_matrix[jnode*3+1] += load.reactionj[1]
+                load_matrix[jnode*3+2] += load.momentj
+    return load_matrix
+
+
 if __name__ == "__main__":
-    """
-    node1 = Node(0, 0, "i", (True, True))
-    node2 = Node(36, 0, "j")
-    node3 = Node(0, 36, "j", (True, True))
-    node4 = Node(36, 36, "j")
-    node5 = Node(72, 36, "j")
-    
-    sad1 = Element(1.9e6, 8, (node1, node2))
-    sad2 = Element(1.9e6, 8, (node2, node3))
-    sad3 = Element(1.9e6, 8, (node3, node4))
-    sad4 = Element(1.9e6, 8, (node2, node4))
-    sad5 = Element(1.9e6, 8, (node2, node5))
-    sad6 = Element(1.9e6, 8, (node4, node5))
-    #print(sad1.get_stiffness())
-    nodes = [node1, node2, node3, node4, node5]
-    elss = [sad1, sad2, sad3, sad4, sad5, sad6]
-    mat = global_matrix(elss)
-    r, r1 = solve_matrix(mat, [0, 0, 0, 0, 0, 0, 0, -500, 0, -500], nodes)
-    localsd, strs = stress(elss, r)
-    print(strs)
-    #print(r)
-    
-    #########3
-    #Prueba 3d
-    nodos = [Node3D(0, 0, 0, "1"), Node3D(-2, 0, -1.5, "2", (True, True, True)), Node3D(-2, 0, 1.5, "3", (True, True, True)), Node3D(-2, 1.5, 0, "4", (True, True, True))] 
-    elementos = [Element3D(70e9, 15/100**2, (nodos[0], nodos[2])), Element3D(70e9, 15/100**2, (nodos[0], nodos[1])), Element3D(70e9, 15/100**2, (nodos[0], nodos[3]))]
-    
-    matrizg = global_matrix3D(elementos)
-    global_desplazamiento, reacciones = solve_matrix3D(matrizg, [0, -5000, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], nodos)
-    print(reacciones)
-    print(global_desplazamiento)
-    ##########33
-    """
-    
-    #Problema de clase para armaduras
-    nodos = [Node(0, 0, "1", (True, True)), Node(96, 0, "2"), Node(192, 0, "3", (False, True)), Node(48, 6.9282*12, "4"), Node(144, 6.9282*12, "5")]
-    elementos = [Element(30e6, 3, (nodos[0], nodos[1])), Element(30e6, 3, (nodos[1], nodos[2])), Element(30e6, 3, (nodos[0], nodos[3])), \
-                 Element(30e6, 3, (nodos[3], nodos[4])), Element(30e6, 3, (nodos[4], nodos[2])),\
-                 Element(30e6, 3, (nodos[3], nodos[1])), Element(30e6, 3, (nodos[1], nodos[4]))]
-    
-    matrizg = global_matrix(elementos)
-    global_desplazamiento, reacciones = solve_matrix(matrizg, [0, 0, 0, -5000, 0, 0, 0, 0, 0, 0], nodos)
-    locales_desplazamiento, esfuerzos = stress(elementos, global_desplazamiento)
-    
-    counter = 0
-    for esfuerzo in esfuerzos:
-        print(f"Esfuerzo en elemento {counter+1} que conecta los nodos({elementos[counter].get_nodes()[0].get_code()+1}, {elementos[counter].get_nodes()[1].get_code()+1}) es: {round(-esfuerzo, 2)}psi")
-        counter+=1
-    
-    for i in range(1, len(nodos)*2+1):
-        if i %2 == 0:
-            r = "y"
-        else:
-            r = "x"
-        print("R"+r+f" para nodo ({(i+1)//2}) es: {round(reacciones[i-1])}lb")
-        print(f"Desplazamiento {r} del nodo ({(i+1)//2}) es: {round(global_desplazamiento[i-1], 6)}in")
-    print("\n")
     
     
-    #Problema en 3D
-    nodos = [Node3D(48, 0, 0, "A"), Node3D(0, 0, -24, "B", (True, True, True)), Node3D(0, 0, 24, "C", (True, True, True)), Node3D(0, 48, 0, "D", (True, True, True)), Node3D(0, 0, 0, "E")]
-    elementos = [Element3D(29e6, 3.093, (nodos[0], nodos[1])), Element3D(29e6, 3.093, (nodos[0], nodos[4])), Element3D(29e6, 3.093, (nodos[0], nodos[2])),\
-                 Element3D(29e6, 3.093, (nodos[0], nodos[3])), Element3D(29e6, 3.093, (nodos[1], nodos[3])), Element3D(29e6, 3.093, (nodos[2], nodos[3])),\
-                 Element3D(29e6, 3.093, (nodos[4], nodos[3])), Element3D(29e6, 3.093, (nodos[4], nodos[2])), Element3D(29e6, 3.093, (nodos[4], nodos[1]))]
+    #Definicion de los nodos: (x, y, nombre)
+    #Aquí mismo se indica la restricción de movimiento por los soportes en los nodos
+    #De forma (True, True, True) indica un soporte fijo puesto que se limita el movimiento en x, y además de la rotacion
+    #Para los nodos que no tienen niguna especificacion es porque el valor default es que sean libres (False, False, False)
+    #Nodo A limita el movimiento en x y en y
+    #Nodo D limita el movimiento en x solamente
+    nodos = [Node3DoF(0, 0, "A", (True, True, False)), Node3DoF(480, 0, "B"), Node3DoF(480, -160, "C"), Node3DoF(0, -400, "D", (True, False, False))]
     
-    matrizg = global_matrix3D(elementos)
-    global_desplazamiento, reacciones = solve_matrix3D(matrizg, [0, -250, -150, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, -250, -150], nodos)
-    pos = ["x", "y", "z"]
-    for i in range(len(nodos)*3):
-        r = pos[i%3]
-        print("R"+r+f" para nodo ({(i+1)//3}) es: {round(reacciones[i])}lb")
-        print(f"Desplazamiento del nodo {nodos[(i)//3].get_name()} en {r} es: {round(global_desplazamiento[i], 7)}in")
+    #Definicion de los elementos. Primero se establece el modulo de young, seguido de la sección transversal y finalmente el segundo momento de area
+    #Como ultimo paso se establece que nodos son los que conforman al elemento, primero se establece el nodo i luego el j
+    elementos = [ElementFrame(200, 480, 77e3, (nodos[0], nodos[1])), ElementFrame(200, 480, 77e3, (nodos[1], nodos[2])), ElementFrame(200, 480, 77e3, (nodos[2], nodos[3]))]
+    
+    #Generacion de la matriz global para los elementos
+    matrizg = global_matrixFrame(elementos)
+    #Creacion de la matriz de cargas
+    #Elemento 1 tiene una carga uniforme de 0.2N/mm y una carga triangular de 0.2N/mm de más a menos entonces no ascendig
+    #El elemento dos no tiene cargas y el elemento 3 tiene una carga a 386.66mm del nodo i de 250N
+    load_matrix = load_elements(elementos, [(UniformLoad(0.2), TriangleLoad(0.2,ascending=False)), (), (PointLoad(250, 386.66),)])
+    #Operacion para obtener los desplazamientos y las reacciones se puede emplear la misma funcion que para armaduras 3D el cambio esta 
+    #en interpretear la restriccion de movimiento en z como restriccion de rotacion
+    dis, reac = solve_matrix3D(matrizg, load_matrix, nodos)
     
     
-    
-    
-    
+    #Presentacion de resultados al usuario
+    coord = ["x", "y", "rot."]
+    units = ["mm", "mm", "rad"]
+    units2 = ["N", "N", "N-mm"]
+    print("-"*22+"Desplazamientos"+"-"*22)
+    for i in range(1, len(dis)+1):
+        print(f"Desplazamiento del nodo {nodos[(i-1)//3].name} en {coord[(i-1)%3]} es:\t\t\t{dis[i-1][0]} {units[(i-1)%3]}")
+    print("-"*60)
+    print("-"*25+"Reacciones"+"-"*25)
+    for i in range(1, len(reac)+1):
+        print(f"Reacción del nodo {nodos[(i-1)//3].name} en {coord[(i-1)%3]} es:\t\t\t{reac[i-1][0]} {units2[(i-1)%3]}")
     
     
     
