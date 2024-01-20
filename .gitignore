@@ -1,0 +1,13 @@
+#Python
+__pycache__/
+venv/
+env/
+*.egg-info/
+*.py[cod]
+*$py.class
+
+
+#Tests
+.pytest_cache/
+
+
