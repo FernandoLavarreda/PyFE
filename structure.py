@@ -36,15 +36,15 @@ if __name__ == "__main__":
                  Element(30e6, 3, (nodes[3], nodes[4])), Element(30e6, 3, (nodes[4], nodes[2])),\
                  Element(30e6, 3, (nodes[3], nodes[1])), Element(30e6, 3, (nodes[1], nodes[4]))]
     
-    structure2D(elementos, nodes)
+    structure2D(elements, nodes)
     plt.show()
     
     nodes = [Node3D(48, 0, 0, "A"), Node3D(0, 0, -24, "B", (True, True, True)), Node3D(0, 0, 24, "C", (True, True, True)), Node3D(0, 48, 0, "D", (True, True, True)), Node3D(0, 0, 0, "E")]
-    elementos = [Element3D(29e6, 3.093, (nodes[0], nodes[1])), Element3D(29e6, 3.093, (nodes[0], nodes[4])), Element3D(29e6, 3.093, (nodes[0], nodes[2])),\
+    elements = [Element3D(29e6, 3.093, (nodes[0], nodes[1])), Element3D(29e6, 3.093, (nodes[0], nodes[4])), Element3D(29e6, 3.093, (nodes[0], nodes[2])),\
                  Element3D(29e6, 3.093, (nodes[0], nodes[3])), Element3D(29e6, 3.093, (nodes[1], nodes[3])), Element3D(29e6, 3.093, (nodes[2], nodes[3])),\
                  Element3D(29e6, 3.093, (nodes[4], nodes[3])), Element3D(29e6, 3.093, (nodes[4], nodes[2])), Element3D(29e6, 3.093, (nodes[4], nodes[1]))]
     
-    structure3D(elementos, nodes)
+    structure3D(elements, nodes)
     plt.show()
 
 
