@@ -1,3 +1,6 @@
+#!./venv/bin/python
+#Fernando Jose Lavarreda Urizar
+"""Utility to visualize systems being analyzed"""
 from typing import List
 import matplotlib.pyplot as plt
 from mpl_toolkits.mplot3d.axes3d import Axes3D
@@ -28,20 +31,20 @@ def structure3D(elements:List[Element], nodes:List[Node3D]):
 
 
 if __name__ == "__main__":
-    nodos = [Node(0, 0, "1", (True, True)), Node(96, 0, "2"), Node(192, 0, "3", (False, True)), Node(48, 6.9282*12, "4"), Node(144, 6.9282*12, "5")]
-    elementos = [Element(30e6, 3, (nodos[0], nodos[1])), Element(30e6, 3, (nodos[1], nodos[2])), Element(30e6, 3, (nodos[0], nodos[3])), \
-                 Element(30e6, 3, (nodos[3], nodos[4])), Element(30e6, 3, (nodos[4], nodos[2])),\
-                 Element(30e6, 3, (nodos[3], nodos[1])), Element(30e6, 3, (nodos[1], nodos[4]))]
+    nodes = [Node(0, 0, "1", (True, True)), Node(96, 0, "2"), Node(192, 0, "3", (False, True)), Node(48, 6.9282*12, "4"), Node(144, 6.9282*12, "5")]
+    elements = [Element(30e6, 3, (nodes[0], nodes[1])), Element(30e6, 3, (nodes[1], nodes[2])), Element(30e6, 3, (nodes[0], nodes[3])), \
+                 Element(30e6, 3, (nodes[3], nodes[4])), Element(30e6, 3, (nodes[4], nodes[2])),\
+                 Element(30e6, 3, (nodes[3], nodes[1])), Element(30e6, 3, (nodes[1], nodes[4]))]
     
-    structure2D(elementos, nodos)
+    structure2D(elementos, nodes)
     plt.show()
     
-    nodos = [Node3D(48, 0, 0, "A"), Node3D(0, 0, -24, "B", (True, True, True)), Node3D(0, 0, 24, "C", (True, True, True)), Node3D(0, 48, 0, "D", (True, True, True)), Node3D(0, 0, 0, "E")]
-    elementos = [Element3D(29e6, 3.093, (nodos[0], nodos[1])), Element3D(29e6, 3.093, (nodos[0], nodos[4])), Element3D(29e6, 3.093, (nodos[0], nodos[2])),\
-                 Element3D(29e6, 3.093, (nodos[0], nodos[3])), Element3D(29e6, 3.093, (nodos[1], nodos[3])), Element3D(29e6, 3.093, (nodos[2], nodos[3])),\
-                 Element3D(29e6, 3.093, (nodos[4], nodos[3])), Element3D(29e6, 3.093, (nodos[4], nodos[2])), Element3D(29e6, 3.093, (nodos[4], nodos[1]))]
+    nodes = [Node3D(48, 0, 0, "A"), Node3D(0, 0, -24, "B", (True, True, True)), Node3D(0, 0, 24, "C", (True, True, True)), Node3D(0, 48, 0, "D", (True, True, True)), Node3D(0, 0, 0, "E")]
+    elementos = [Element3D(29e6, 3.093, (nodes[0], nodes[1])), Element3D(29e6, 3.093, (nodes[0], nodes[4])), Element3D(29e6, 3.093, (nodes[0], nodes[2])),\
+                 Element3D(29e6, 3.093, (nodes[0], nodes[3])), Element3D(29e6, 3.093, (nodes[1], nodes[3])), Element3D(29e6, 3.093, (nodes[2], nodes[3])),\
+                 Element3D(29e6, 3.093, (nodes[4], nodes[3])), Element3D(29e6, 3.093, (nodes[4], nodes[2])), Element3D(29e6, 3.093, (nodes[4], nodes[1]))]
     
-    structure3D(elementos, nodos)
+    structure3D(elementos, nodes)
     plt.show()
 
 

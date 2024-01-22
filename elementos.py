@@ -1,3 +1,4 @@
+#!./venv/bin/python
 #Fernand José Lavarreda Urizar
 
 import numpy as np
@@ -6,6 +7,8 @@ from dataclasses import dataclass
 from math import atan, pi, cos, sin
 
 class Node:
+    """2D Vector representation has a name and movement in X and/or Y direction may be restricted
+    defaulted to false in both directions"""
     code = 0
     def __init__(self, x:float, y:float, name:str, limits:Tuple[bool, bool]=(False, False)):
         self.name = name
@@ -38,6 +41,7 @@ class Node:
 
 
 class Element:
+    """Model composed of two 2D Nodes, has uniform cross section as Young-modulus"""
     code = 0
     def __init__(self, young_modulus:float, area:float, nodes:Tuple[Node, Node]):
         self.young = young_modulus
@@ -56,6 +60,7 @@ class Element:
     
     
     def thetha(self):
+        """Determine rotation of Element respect global coordinate system"""
         xcomp = self.nodes[1].get_x()-self.nodes[0].get_x()
         ycomp = self.nodes[1].get_y()-self.nodes[0].get_y()
         
@@ -111,6 +116,7 @@ class Element:
     
 
 def global_matrix(elements:List[Element]):
+    """Element matrix to solve"""
     gmatrix = np.zeros((Node.code*2, Node.code*2))
     for element in elements:
         codei = element.get_nodes()[0].get_code()
@@ -131,6 +137,7 @@ def global_matrix(elements:List[Element]):
 
 
 def solve_matrix(matrix:np.array, conditions:List[float], nodes:List[Node]):
+    """Obtain displacement of nodes and global reactions"""
     assert len(nodes) == len(matrix)//2
     boundary_cond = matrix.copy()
     counter = 0
@@ -155,6 +162,7 @@ def solve_matrix(matrix:np.array, conditions:List[float], nodes:List[Node]):
 
 
 def stress(elements:List[Element], displacement:np.array):
+    """Obtain stresses from global displacement"""
     local_disp = []
     stresses = []
     for element in elements:
@@ -171,6 +179,8 @@ def stress(elements:List[Element], displacement:np.array):
 
 
 class Node3D:
+    """3D Vector representation, has a name and movement in X, Y and/or Z direction may be restricted
+    defaulted to false in all directions"""
     code = 0
     def __init__(self, x, y, z, name, limits:Tuple[bool, bool, bool]=(False, False, False)):
         self.x = x
@@ -207,6 +217,7 @@ class Node3D:
 
 
 class Element3D:
+    """Model made of 2 3D Nodes"""
     code = 0
     def __init__(self, young_modulus:float, area:float, nodes:Tuple[Node3D, Node3D]):
         self.young = young_modulus
@@ -303,6 +314,8 @@ def solve_matrix3D(matrix:np.array, conditions:List[float], nodes:List[Node3D]):
 
 
 class Node3DoF(Node):
+    """Reinterpretation of Node3D, instead of using the 3rd dimension solely as Z movement, this model
+    may be used to interpret Frames in 2D where the elements may rotate"""
     def __init__(self, x:float, y:float, name:str, limits:Tuple[bool, bool, bool]=(False, False, False)):
         super().__init__(x, y, name, limits)
 
@@ -430,7 +443,7 @@ def global_matrixFrame(elements:List[ElementFrame]):
 
 
 def load_elements(elements:List[ElementFrame], loads:List[List[PerpendicularLoad]]):
-    assert len(loads) == len(elementos), "Loads must equal elements"
+    assert len(loads) == len(elements), "Loads must equal elements"
     
     load_matrix = np.zeros((Node3DoF.code*3, 1))
     for i in range(len(loads)):
@@ -449,42 +462,38 @@ def load_elements(elements:List[ElementFrame], loads:List[List[PerpendicularLoad
 
 
 if __name__ == "__main__":
+    #Example of usage:
+    #Start by defining the nodes (x, y, name and if there is any limitation to their movement [X, Y| X, Y, Z | X,Y, rotation])
+    #This depends on the elements being modeled
+    
+    nodes = [Node3DoF(0, 0, "A", (True, True, False)), Node3DoF(480, 0, "B"), Node3DoF(480, -160, "C"), Node3DoF(0, -400, "D", (True, False, False))]
+    
+    #Definition of Frame Elements (2D), young modulus, area, second moment of area and the nodes that make up each element. Node i, then j.
+    elements = [ElementFrame(200, 480, 77e3, (nodes[0], nodes[1])), ElementFrame(200, 480, 77e3, (nodes[1], nodes[2])), ElementFrame(200, 480, 77e3, (nodes[2], nodes[3]))]
+    
+    #Create global stiffness matrix from the elements just created
+    matrizg = global_matrixFrame(elements)
+
+    #Create load matrix
+    #Element 1 has a uniform load of 0.2N/mm and a triangular load of 0.2N/mm with a negative slope so it is especified as no ascendig
+    #Element 2 has no load and has a point load 386.66mm from the node i of 250N
+    load_matrix = load_elements(elements, [(UniformLoad(0.2), TriangleLoad(0.2,ascending=False)), (), (PointLoad(250, 386.66),)])
+
+    #Obtain displacement and reaction, interpreting 3D dimention from the nodes as rotation freedom/restriction instead of movement in Z direction for this particular problem
+    dis, reac = solve_matrix3D(matrizg, load_matrix, nodes)
     
     
-    #Definicion de los nodos: (x, y, nombre)
-    #Aquí mismo se indica la restricción de movimiento por los soportes en los nodos
-    #De forma (True, True, True) indica un soporte fijo puesto que se limita el movimiento en x, y además de la rotacion
-    #Para los nodos que no tienen niguna especificacion es porque el valor default es que sean libres (False, False, False)
-    #Nodo A limita el movimiento en x y en y
-    #Nodo D limita el movimiento en x solamente
-    nodos = [Node3DoF(0, 0, "A", (True, True, False)), Node3DoF(480, 0, "B"), Node3DoF(480, -160, "C"), Node3DoF(0, -400, "D", (True, False, False))]
-    
-    #Definicion de los elementos. Primero se establece el modulo de young, seguido de la sección transversal y finalmente el segundo momento de area
-    #Como ultimo paso se establece que nodos son los que conforman al elemento, primero se establece el nodo i luego el j
-    elementos = [ElementFrame(200, 480, 77e3, (nodos[0], nodos[1])), ElementFrame(200, 480, 77e3, (nodos[1], nodos[2])), ElementFrame(200, 480, 77e3, (nodos[2], nodos[3]))]
-    
-    #Generacion de la matriz global para los elementos
-    matrizg = global_matrixFrame(elementos)
-    #Creacion de la matriz de cargas
-    #Elemento 1 tiene una carga uniforme de 0.2N/mm y una carga triangular de 0.2N/mm de más a menos entonces no ascendig
-    #El elemento dos no tiene cargas y el elemento 3 tiene una carga a 386.66mm del nodo i de 250N
-    load_matrix = load_elements(elementos, [(UniformLoad(0.2), TriangleLoad(0.2,ascending=False)), (), (PointLoad(250, 386.66),)])
-    #Operacion para obtener los desplazamientos y las reacciones se puede emplear la misma funcion que para armaduras 3D el cambio esta 
-    #en interpretear la restriccion de movimiento en z como restriccion de rotacion
-    dis, reac = solve_matrix3D(matrizg, load_matrix, nodos)
-    
-    
-    #Presentacion de resultados al usuario
+    #Printing results
     coord = ["x", "y", "rot."]
     units = ["mm", "mm", "rad"]
     units2 = ["N", "N", "N-mm"]
-    print("-"*22+"Desplazamientos"+"-"*22)
+    print("-"*22+"Displacements"+"-"*22)
     for i in range(1, len(dis)+1):
-        print(f"Desplazamiento del nodo {nodos[(i-1)//3].name} en {coord[(i-1)%3]} es:\t\t\t{dis[i-1][0]} {units[(i-1)%3]}")
+        print(f"Displacement from the node {nodes[(i-1)//3].name} en {coord[(i-1)%3]} es:\t\t\t{dis[i-1][0]} {units[(i-1)%3]}")
     print("-"*60)
     print("-"*25+"Reacciones"+"-"*25)
     for i in range(1, len(reac)+1):
-        print(f"Reacción del nodo {nodos[(i-1)//3].name} en {coord[(i-1)%3]} es:\t\t\t{reac[i-1][0]} {units2[(i-1)%3]}")
+        print(f"Reaction form node {nodes[(i-1)//3].name} en {coord[(i-1)%3]} es:\t\t\t{reac[i-1][0]} {units2[(i-1)%3]}")
     
     
     
